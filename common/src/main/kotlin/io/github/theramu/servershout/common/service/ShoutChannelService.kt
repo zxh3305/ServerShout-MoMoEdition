@@ -2,6 +2,8 @@ package io.github.theramu.servershout.common.service
 
 import io.github.theramu.servershout.common.ServerShoutApi
 import io.github.theramu.servershout.common.ServerShoutProxyApi
+import io.github.theramu.servershout.common.api.event.ShoutMessageEvent
+import io.github.theramu.servershout.common.api.event.ShoutMessageListener
 import io.github.theramu.servershout.common.exception.ServiceException
 import io.github.theramu.servershout.common.platform.ProxyPlatform
 import io.github.theramu.servershout.common.platform.player.PlatformProxyPlayer
@@ -27,6 +29,22 @@ class ShoutChannelService {
 
     private val commandPattern = Pattern.compile("""/(servershoutjoin|servershoutmute|servershoutmuteplayer|servershoutmutechannel|servershoutmuteglobal|servershoutunmute) ([a-f0-9]{32})""")
     private val buttonPattern = Pattern.compile("""BUTTON\((JOIN|MUTE|MUTE_PLAYER|MUTE_CHANNEL|MUTE_GLOBAL|UNMUTE),"([^"]*)"(?:,"([^"]*)")?\)""")
+
+    private val messageListeners = mutableListOf<ShoutMessageListener>()
+
+    /**
+     * 注册喊话消息监听器。
+     */
+    fun addMessageListener(listener: ShoutMessageListener) {
+        messageListeners.add(listener)
+    }
+
+    /**
+     * 移除喊话消息监听器。
+     */
+    fun removeMessageListener(listener: ShoutMessageListener) {
+        messageListeners.remove(listener)
+    }
 
     private val api get() = ServerShoutApi.api as ServerShoutProxyApi
     private val platform get() = api.platform as ProxyPlatform
@@ -313,6 +331,13 @@ class ShoutChannelService {
         val server = channelMessage.server
         val channel = channelMessage.channel
         var content = channelMessage.content
+
+        // 触发喊话消息事件，允许第三方插件（如 MoMoTextFilter）修改消息内容
+        if (messageListeners.isNotEmpty()) {
+            val event = ShoutMessageEvent(sender.uuid, sender.name, content, channel.name ?: "")
+            messageListeners.forEach { it.onShoutMessage(event) }
+            content = event.content
+        }
 
         var tokenCostName: String? = null
         var balanceAmount = 1L
