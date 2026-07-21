@@ -6,4 +6,4 @@ ServerShout is a cross-server shout and invite plugin for BungeeCord/Velocity/Bu
 
 The edition includes extended events for text processing, which allows other plugins to detect or replace characters before ServerShout sends the messages to players.
 
-For downloading, please visit our [resource]([https://modrinth.com/plugin/servershout-momo]).
+For downloading, please visit our [resource](https://modrinth.com/plugin/servershout-momo).
