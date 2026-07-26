@@ -12,8 +12,10 @@ data class ShoutChannel(
     var name: String?,
     val enabled: Boolean,
     val chatPrefix: String,
+    val commands: List<String>,
     val permission: String,
     val colorPermission: String,
+    val bypassCooldownPermission: String,
     val allowEmptyMessage: Boolean,
     val tokenCostFull: TokenCost,
     val tokenCostEmpty: TokenCost,
@@ -33,8 +35,10 @@ data class ShoutChannel(
             name = null,
             enabled = map["enabled"] as Boolean,
             chatPrefix = map["chat-prefix"] as String,
+            commands = map["commands"] as? List<String> ?: emptyList(),
             permission = map["permission"] as String,
             colorPermission = map["color-permission"] as String,
+            bypassCooldownPermission = map["bypass-cooldown-permission"] as? String ?: "",
             allowEmptyMessage = map["allow-empty-message"] as Boolean,
             tokenCostFull = TokenCost(map["token-cost-full"] as String),
             tokenCostEmpty = TokenCost(map["token-cost-empty"] as String),
@@ -67,6 +71,10 @@ data class ShoutChannel(
 
     fun hasColorPermission(player: PlatformProxyPlayer): Boolean {
         return colorPermission.isEmpty() || player.hasPermission(colorPermission)
+    }
+
+    fun hasBypassCooldownPermission(player: PlatformProxyPlayer): Boolean {
+        return bypassCooldownPermission.isEmpty() || player.hasPermission(bypassCooldownPermission)
     }
 
     class TokenCost(notation: String) {
