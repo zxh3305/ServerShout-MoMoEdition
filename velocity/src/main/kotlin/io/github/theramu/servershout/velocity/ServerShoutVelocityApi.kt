@@ -3,6 +3,7 @@ package io.github.theramu.servershout.velocity
 import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import io.github.theramu.servershout.common.ServerShoutProxyApi
+import io.github.theramu.servershout.velocity.command.VelocityChannelCommandAdapter
 import io.github.theramu.servershout.velocity.command.VelocityCommandAdapter
 import io.github.theramu.servershout.velocity.listener.PlayerEventListener
 import io.github.theramu.servershout.velocity.listener.PluginChannelMessageListener
@@ -28,6 +29,7 @@ open class ServerShoutVelocityApi protected constructor(
     override val dataFolder = dataDirectory.toFile()
     val identifier = MinecraftChannelIdentifier.from("servershout:main")
     private var metrics: Metrics? = null
+    private val registeredDynamicCommands = mutableListOf<String>()
 
     override fun onEnable() {
         super.onEnable()
@@ -35,12 +37,14 @@ open class ServerShoutVelocityApi protected constructor(
         proxy.eventManager.register(plugin, PlayerEventListener())
         proxy.eventManager.register(plugin, PluginChannelMessageListener())
         registerCommands()
+        registerDynamicChannelCommands()
         metrics = makeMetrics()
         logger.info("&aServerShout is ready!")
     }
 
     override fun onDisable() {
         super.onDisable()
+        unregisterDynamicChannelCommands()
         proxy.eventManager.unregisterListeners(plugin)
         metrics?.shutdown()
     }
@@ -54,11 +58,39 @@ open class ServerShoutVelocityApi protected constructor(
         proxyCommandManager.register(commandMeta, VelocityCommandAdapter())
     }
 
-    private fun makeMetrics(): Metrics {
-        val clazz = Metrics::class.java
-        val constructor = clazz.getDeclaredConstructor(Any::class.java, ProxyServer::class.java, Logger::class.java, Path::class.java, Int::class.java)
-        constructor.isAccessible = true
-        return constructor.newInstance(plugin, proxy, logger, dataFolder.toPath(), 23116)
+    private fun registerDynamicChannelCommands() {
+        val proxyCommandManager = proxy.commandManager
+        for (channel in shoutChannelService.getChannels()) {
+            for (command in channel.commands) {
+                if (command.isEmpty()) continue
+                val cmdName = command.removePrefix("/")
+                val commandMeta = proxyCommandManager.metaBuilder(cmdName)
+                    .plugin(plugin)
+                    .build()
+                proxyCommandManager.register(commandMeta, VelocityChannelCommandAdapter(cmdName))
+                registeredDynamicCommands.add(cmdName)
+            }
+        }
+    }
+
+    private fun unregisterDynamicChannelCommands() {
+        val proxyCommandManager = proxy.commandManager
+        for (cmdName in registeredDynamicCommands) {
+            proxyCommandManager.unregister(cmdName)
+        }
+        registeredDynamicCommands.clear()
+    }
+
+    private fun makeMetrics(): Metrics? {
+        return try {
+            val clazz = Metrics::class.java
+            val constructor = clazz.getDeclaredConstructor(Any::class.java, ProxyServer::class.java, Logger::class.java, Path::class.java, Int::class.java)
+            constructor.isAccessible = true
+            constructor.newInstance(plugin, proxy, logger, dataFolder.toPath(), 23116)
+        } catch (e: Exception) {
+            logger.warn("bStats Metrics初始化失败，已跳过: ${e.message}")
+            null
+        }
     }
 
     override fun sendUpdate(playerName: String) {
