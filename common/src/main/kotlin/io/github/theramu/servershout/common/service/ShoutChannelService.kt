@@ -111,28 +111,53 @@ class ShoutChannelService {
             return false
         }
 
-        val channel = channels.find {
-            it.enabled &&
-                    it.senderServerList.isAllowed(serverName) &&
-                    it.hasPermission(player) &&
-                    it.chatPrefix.isNotEmpty() &&
-                    message.startsWith(it.chatPrefix.trimEnd())
-        } ?: return false
+        // 先尝试匹配命令
+        var matchedChannel: ShoutChannel? = null
+        var content = ""
+        var isCommandMatch = false
+
+        // 检查命令匹配
+        for (channel in channels) {
+            if (!channel.enabled || !channel.senderServerList.isAllowed(serverName) || !channel.hasPermission(player)) {
+                continue
+            }
+            for (command in channel.commands) {
+                if (message.startsWith("$command ") || message == command) {
+                    matchedChannel = channel
+                    content = message.removePrefix(command).trimStart()
+                    isCommandMatch = true
+                    break
+                }
+            }
+            if (isCommandMatch) break
+        }
+
+        // 如果没有命令匹配，尝试前缀匹配
+        if (!isCommandMatch) {
+            matchedChannel = channels.find {
+                it.enabled &&
+                        it.senderServerList.isAllowed(serverName) &&
+                        it.hasPermission(player) &&
+                        it.chatPrefix.isNotEmpty() &&
+                        message.startsWith(it.chatPrefix.trimEnd())
+            } ?: return false
+            content = message.removePrefix(matchedChannel.chatPrefix.trimEnd()).trimStart()
+        }
+
+        val channel = matchedChannel ?: return false
 
         if (isSending(player)) {
             player.sendLanguageMessage("message.shout.sending")
             return true
         }
         pruneHistoryMessages()
-        val coolingMessage = getCoolingMessage(player, channel)
+        val coolingMessage = if (channel.hasBypassCooldownPermission(player)) null else getCoolingMessage(player, channel)
 
         if (coolingMessage != null) {
             val remaining = (channel.cooldown - (System.currentTimeMillis() - coolingMessage.timestamp) / 1000)
             player.sendLanguageMessage("message.shout.cooldown", remaining)
             return true
         }
-
-        val content = message.removePrefix(channel.chatPrefix.trimEnd()).trimStart()
 
         val isEmpty = if (channel.hasColorPermission(player)) {
             ColorUtil.stripColor(content).isEmpty()
@@ -180,18 +205,16 @@ class ShoutChannelService {
         val matcher = buttonPattern.matcher(str)
         var lastEnd = 0
 
-        val legacySection = LegacyComponentSerializer.legacySection()
-
         while (matcher.find()) {
-            // 按钮前的文本
+            // 按钮前的文本（使用 ColorUtil.deserializeComponent 在最后发送时处理颜色）
             if (matcher.start() > lastEnd) {
-                component.append(legacySection.deserialize(replaceFun(str.substring(lastEnd, matcher.start()))))
+                component.append(ColorUtil.deserializeComponent(replaceFun(str.substring(lastEnd, matcher.start()))))
             }
 
             val type = matcher.group(1)
             val text = matcher.group(2)
             val hover = matcher.group(3)
-            var buttonComponent = legacySection.deserialize(replaceFun(text)).clickEvent(
+            var buttonComponent = ColorUtil.deserializeComponent(replaceFun(text)).clickEvent(
                 when (type) {
                     "JOIN" -> ClickEvent.runCommand("/servershoutjoin $messageId")
                     "MUTE" -> ClickEvent.runCommand("/servershoutmute $messageId")
@@ -210,9 +233,9 @@ class ShoutChannelService {
             lastEnd = matcher.end()
         }
 
-        // 最后一个按钮后的文本
+        // 最后一个按钮后的文本（使用 ColorUtil.deserializeComponent 在最后发送时处理颜色）
         if (lastEnd < str.length) {
-            component.append(legacySection.deserialize(replaceFun(str.substring(lastEnd))))
+            component.append(ColorUtil.deserializeComponent(replaceFun(str.substring(lastEnd))))
         }
 
         return component.build()
