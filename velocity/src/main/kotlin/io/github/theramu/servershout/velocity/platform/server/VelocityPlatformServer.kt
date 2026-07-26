@@ -17,10 +17,10 @@ class VelocityPlatformServer(
     override val players = handle.playersConnected.map { VelocityPlatformPlayer(it, this) }
 
     override fun sendMessage(message: String) {
-        handle.sendMessage(ColorUtil.deserializeComponent(message))
+        players.forEach { it.sendMessage(message) }
     }
 
     override fun sendMessage(component: Component) {
-        handle.sendMessage(component)
+        players.forEach { it.sendMessage(component) }
     }
 }
